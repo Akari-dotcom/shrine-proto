@@ -211,7 +211,7 @@
         <div class="menu-item" style="flex-direction: column; gap:10px;">
             <button class="btn" style="width:100%;" onclick="switchMode()">モード切替</button>
             <button class="btn" style="width:100%; color:red;" onclick="triggerReset()">リセット</button>
-            <button class="btn" style="width:100%;" onclick="alert('制作者情報:\nニワトリ制作所\n福井県の全神社巡りを応援しています！')">制作者情報</button>
+            <button class="btn" style="width:100%;" onclick="openInfoPopup()">制作者情報</button>
         </div>
     </div>
 
@@ -243,7 +243,6 @@
         <h2 style="margin-top: 40px;">タイムアタック</h2>
         <div class="box" style="text-align:center;">
             <div id="ta-timer" style="font-size: 32px; font-weight:bold; margin-bottom:15px;">00:00.00</div>
-            <!-- 💡ここを追加：抽選中プログレスバー -->
             <div id="ta-progress-container" style="display: none; width: 100%; background-color: #eeeeee; border: var(--border-style); border-radius: var(--radius); height: 16px; margin: 15px 0; overflow: hidden; position: relative;">
                 <div id="ta-progress-bar" style="width: 0%; height: 100%; background-color: #000000; transition: width 0.1s linear;"></div>
             </div>
@@ -271,6 +270,17 @@
             <input type="text" id="popup-input" class="input-field">
             <button class="btn" onclick="closeEditPopup(true)">保存</button>
             <button class="btn" style="box-shadow:none; transform:none;" onclick="closeEditPopup(false)">キャンセル</button>
+        </div>
+    </div>
+
+    <div id="info-overlay" class="overlay">
+        <div class="popup" style="max-width: 320px;">
+            <h3 style="margin-top: 0; border-bottom: var(--border-style); padding-bottom: 8px;">アプリ制作者情報</h3>
+            <div style="text-align: left; font-size: 14px; line-height: 1.6; margin: 15px 0;">
+                <p style="margin: 5px 0;"><strong>開発元:</strong> ニワトリ制作所</p>
+                <p style="margin: 5px 0;"><strong>目的:</strong> 福井県の全神社巡りを応援しています！データ収集とテスト走行をよろしくお願いします。</p>
+            </div>
+            <button class="btn" style="width: 100%; box-shadow: none; transform: none;" onclick="closeInfoPopup()">閉じる</button>
         </div>
     </div>
 
@@ -770,6 +780,15 @@
                     location.reload();
                 }
             }
+        }
+    // --- ⚙️ 追加：制作者情報ポップアップの開閉制御ロジック ---
+        function openInfoPopup() {
+            toggleSidebar(); // サイドバーを閉じる
+            document.getElementById("info-overlay").style.display = "flex"; // ポップアップを表示
+        }
+
+        function closeInfoPopup() {
+            document.getElementById("info-overlay").style.display = "none"; // ポップアップを閉じる
         }
     </script>
 </body>
