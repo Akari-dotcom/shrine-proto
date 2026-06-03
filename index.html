@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>神社探索レーダーアプリ</title>
+    
+    <link rel="icon" type="image/png" href="./torii.png">
+    <link rel="apple-touch-icon" href="./torii.png">
+
     <style>
         /* --- 基本設定 --- */
         :root {
@@ -68,6 +72,13 @@
         .btn:active {
             transform: translateY(4px);
             box-shadow: 0 0 0 #000000;
+        }
+        .btn:disabled {
+            background-color: #eeeeee !important;
+            color: #888888 !important;
+            box-shadow: 0 2px 0 #888888 !important;
+            transform: translateY(2px) !important;
+            cursor: not-allowed;
         }
         .input-field {
             border: var(--border-style);
@@ -220,15 +231,22 @@
     <div id="screen-ta" class="screen">
         <h2 style="margin-top: 40px;">タイムアタック</h2>
         <div class="box" style="text-align:center;">
-            <div id="ta-timer" style="font-size: 32px; font-weight:bold; margin-bottom:10px;">00:00.00</div>
-            <button class="btn" id="ta-lottery-btn" style="margin-right:10px;" onclick="drawTaLottery()">抽選する</button>
-            <button class="btn" id="ta-start-btn" onclick="startTaTimer()" disabled>スタート</button>
+            <div id="ta-timer" style="font-size: 32px; font-weight:bold; margin-bottom:15px;">00:00.00</div>
+            
+            <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                <button class="btn" id="ta-lottery-btn" onclick="drawTaLottery()">抽選する</button>
+                <button class="btn" id="ta-start-btn" onclick="startTaTimer()" disabled>スタート</button>
+                <button class="btn" id="ta-pause-btn" onclick="toggleTaPause()" style="display:none;">一時停止</button>
+                <button class="btn" id="ta-stop-btn" onclick="stopAndResetTa()" style="display:none; color:red; border-color:red; box-shadow:0 4px 0 red;">中止</button>
+            </div>
         </div>
         <div class="box" id="ta-target" style="display:none; text-align: center;">
             <h3>🎯 ターゲット神社</h3>
             <h4 id="ta-shrine-name">--</h4>
+            <p style="font-size:12px; color:#666; margin: -5px 0 10px 0;">座標: <span id="ta-shrine-coords">--</span></p>
             <p>方角: <span id="ta-shrine-bearing">--</span>° | 距離: <span id="ta-shrine-distance">--</span>m</p>
             <div id="ta-speed-alert" style="color: red; font-weight: bold; margin-top: 10px; display: none;">【警告】速度超過を検知！</div>
+            <div id="ta-paused-alert" style="color: orange; font-weight: bold; margin-top: 10px; display: none;">⏸️ 一時停止中</div>
         </div>
     </div>
 
@@ -250,24 +268,25 @@
 
     <script>
         // --- 状態管理オブジェクト ---
-        let ALL_SHRINES_DB = []; // 💡外部JSONから取得した全神社データがここに入る
+        let ALL_SHRINES_DB = []; 
         let userData = { name: "", height: 170, foot: 26, currentMode: "normal" };
-        let visitedShrines = new Set(); // 参拝済み神社の一意なキー（"北緯_東経" の文字列）
+        let visitedShrines = new Set(); 
         let currentWatchId = null;
         const EARTH_RADIUS = 6378137;
 
         // タイムアタック用変数
         let taTargetShrine = null;
         let taStartTime = null;
+        let taElapsedBeforePause = 0; // 一時停止前の経過時間を蓄積
         let taTimerInterval = null;
         let taIsRunning = false;
+        let taIsPaused = false; // 一時停止フラグ
 
         const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        // --- 1. 【新規】同階層の外部JSONファイルを読み込む関数 ---
+        // --- 1. 同階層の外部JSONファイルを読み込む関数 ---
         async function fetchShrineDatabase() {
             try {
-                // 同じGitHubレポジトリ内の「shrines.json」を相対パスで取得
                 const response = await fetch("./shrines.json");
                 if (!response.ok) throw new Error("ネットワーク応答が正常ではありません。");
                 
@@ -286,7 +305,6 @@
 
         // --- 起動シークエンス ---
         window.addEventListener("DOMContentLoaded", async () => {
-            // ロゴアニメーション
             const devLogo = document.getElementById("developer-logo");
             const titleLogo = document.getElementById("title-logo");
             const splash = document.getElementById("splash-screen");
@@ -305,17 +323,14 @@
             await sleep(600);
             splash.style.display = "none";
 
-            // 💡データベースファイルの非同期読み込みを実行
             const dbLoaded = await fetchShrineDatabase();
-            if (!dbLoaded) return; // 読み込めなければここでストップ
+            if (!dbLoaded) return; 
 
-            // 2. 2回目以降の判定
             if (localStorage.getItem("shrine_app_configured") === "true") {
                 userData.name = localStorage.getItem("user_name");
                 userData.height = Number(localStorage.getItem("user_height")) || 170;
                 userData.foot = Number(localStorage.getItem("user_foot")) || 26;
                 
-                // 参拝履歴の復元
                 const savedHistory = localStorage.getItem("visited_shrines_history_v2");
                 if (savedHistory) visitedShrines = new Set(JSON.parse(savedHistory));
 
@@ -332,7 +347,7 @@
         function startApp() {
             userData.name = document.getElementById("setup-name").value || "ニワトリ";
             userData.height = Number(document.getElementById("setup-height").value) || 170;
-            userData.foot = Number(document.getElementById("setup-foot").value) || 26;
+            userData.foot = document.getElementById("setup-foot").value || 26;
 
             localStorage.setItem("shrine_app_configured", "true");
             localStorage.setItem("user_name", userData.name);
@@ -371,7 +386,7 @@
                 userData.currentMode = "normal";
                 document.getElementById("screen-ta").classList.remove("active-screen");
                 document.getElementById("screen-main").classList.add("active-screen");
-                stopTaTimer();
+                forceStopTaTimer();
             }
         }
 
@@ -408,7 +423,6 @@
                     document.getElementById("gps-lat").innerText = lat.toFixed(5);
                     document.getElementById("gps-lng").innerText = lng.toFixed(5);
 
-                    // 不正速度チェック
                     if (position.coords.speed !== null) {
                         const speedKmh = position.coords.speed * 3.6;
                         const avgWalkSpeed = calculateAvgWalkingSpeed();
@@ -418,10 +432,10 @@
                         }
                     }
 
-                    // モードに応じて処理を分岐
                     if (userData.currentMode === "normal") {
                         executeSearchLogic(lat, lng);
-                    } else if (userData.currentMode === "ta" && taIsRunning) {
+                    } else if (userData.currentMode === "ta" && taIsRunning && !taIsPaused) {
+                        // 💡一時停止中でない場合のみ追従処理を実行
                         executeTaTracking(lat, lng);
                     }
                 },
@@ -430,15 +444,14 @@
             );
         }
 
-        // --- ループ検索アルゴリズム ---
+        // --- 通常モード：ループ検索アルゴリズム ---
         function executeSearchLogic(userLat, userLng) {
-            let radius = 1500; // 1.5km
-            const maxRadius = 10000; // 10km
+            let radius = 1500; 
+            const maxRadius = 10000; 
             let hits = [];
 
             while (radius <= maxRadius) {
                 hits = ALL_SHRINES_DB.filter(shrine => {
-                    // 💡固有IDがなくても、緯度と経度を繋げた文字列（例: "35.55366_135.48005"）を一意の識別キーとして利用
                     const uniqueKey = `${shrine.北緯}_${shrine.東経}`;
                     if (visitedShrines.has(uniqueKey)) return false;
 
@@ -466,7 +479,10 @@
                     const card = document.createElement("div");
                     card.className = "box";
                     card.innerHTML = `
-                        <h3 style="margin:0 0 5px 0;">${shrine.名称}</h3>
+                        <h3 style="margin:0 0 3px 0;">${shrine.名称}</h3>
+                        <div style="font-size:11px; color:#777; margin-bottom:8px;">
+                            座標: ${shrine.北緯.toFixed(6)}, ${shrine.東経.toFixed(6)}
+                        </div>
                         <p style="margin:0 0 10px 0; font-size:14px; color:#555;">
                             方角: ${shrine.tempBear}° 方向 | 直線距離: ${Math.round(shrine.tempDist)}m
                         </p>
@@ -503,10 +519,19 @@
         function resetTaUi() {
             document.getElementById("ta-timer").innerText = "00:00.00";
             document.getElementById("ta-target").style.display = "none";
+            document.getElementById("ta-lottery-btn").style.display = "inline-block";
             document.getElementById("ta-lottery-btn").disabled = false;
+            document.getElementById("ta-start-btn").style.display = "inline-block";
             document.getElementById("ta-start-btn").disabled = true;
+            document.getElementById("ta-pause-btn").style.display = "none";
+            document.getElementById("ta-pause-btn").innerText = "一時停止";
+            document.getElementById("ta-stop-btn").style.display = "none";
+            document.getElementById("ta-speed-alert").style.display = "none";
+            document.getElementById("ta-paused-alert").style.display = "none";
             taTargetShrine = null;
             taIsRunning = false;
+            taIsPaused = false;
+            taElapsedBeforePause = 0;
         }
 
         function drawTaLottery() {
@@ -515,7 +540,7 @@
                 const uLng = pos.coords.longitude;
 
                 const candidates = ALL_SHRINES_DB.filter(shrine => {
-                    return getDistance(uLat, uLng, shrine.北緯, shrine.東経) <= 20000; // 半径20km圏内
+                    return getDistance(uLat, uLng, shrine.北緯, shrine.東経) <= 20000; 
                 });
 
                 if (candidates.length === 0) {
@@ -529,6 +554,7 @@
                 const bear = getBearing(uLat, uLng, taTargetShrine.北緯, taTargetShrine.東経);
 
                 document.getElementById("ta-shrine-name").innerText = taTargetShrine.名称;
+                document.getElementById("ta-shrine-coords").innerText = `${taTargetShrine.北緯.toFixed(6)}, ${taTargetShrine.東経.toFixed(6)}`;
                 document.getElementById("ta-shrine-bearing").innerText = bear;
                 document.getElementById("ta-shrine-distance").innerText = Math.round(dist);
                 
@@ -537,19 +563,63 @@
             });
         }
 
+        // タイマースタート
         function startTaTimer() {
             taIsRunning = true;
+            taIsPaused = false;
             taStartTime = performance.now();
-            document.getElementById("ta-start-btn").disabled = true;
-            document.getElementById("ta-lottery-btn").disabled = true;
 
+            // ボタン表示の切り替え
+            document.getElementById("ta-lottery-btn").style.display = "none";
+            document.getElementById("ta-start-btn").style.display = "none";
+            document.getElementById("ta-pause-btn").style.display = "inline-block";
+            document.getElementById("ta-stop-btn").style.display = "inline-block";
+
+            runTimerInterval();
+        }
+
+        // タイマーの更新処理ループ
+        function runTimerInterval() {
             taTimerInterval = setInterval(() => {
-                const elapsed = performance.now() - taStartTime;
-                const min = Math.floor(elapsed / 60000).toString().padStart(2, '0');
-                const sec = Math.floor((elapsed % 60000) / 1000).toString().padStart(2, '0');
-                const ms = Math.floor((elapsed % 1000) / 10).toString().padStart(2, '0');
+                const elapsedSinceStart = performance.now() - taStartTime;
+                const totalElapsed = taElapsedBeforePause + elapsedSinceStart;
+
+                const min = Math.floor(totalElapsed / 60000).toString().padStart(2, '0');
+                const sec = Math.floor((totalElapsed % 60000) / 1000).toString().padStart(2, '0');
+                const ms = Math.floor((totalElapsed % 1000) / 10).toString().padStart(2, '0');
                 document.getElementById("ta-timer").innerText = `${min}:${sec}.${ms}`;
             }, 10);
+        }
+
+        // 💡新規：一時停止 と 再開 のトグル制御
+        function toggleTaPause() {
+            if (!taIsRunning) return;
+
+            if (!taIsPaused) {
+                // 【一時停止する処理】
+                taIsPaused = true;
+                clearInterval(taTimerInterval); // タイマー停止
+                taElapsedBeforePause += (performance.now() - taStartTime); // ここまでの経過時間を保存
+                
+                document.getElementById("ta-pause-btn").innerText = "再開";
+                document.getElementById("ta-paused-alert").style.display = "block";
+            } else {
+                // 【再開する処理】
+                taIsPaused = false;
+                taStartTime = performance.now(); // スタート時間をリセット
+                
+                document.getElementById("ta-pause-btn").innerText = "一時停止";
+                document.getElementById("ta-paused-alert").style.display = "none";
+                runTimerInterval(); // タイマー再始動
+            }
+        }
+
+        // 💡新規：中止（停止・リセット）ボタンの処理
+        function stopAndResetTa() {
+            if (confirm("現在進行中のタイムアタックを中止してリセットしますか？\n(現在のスコアは記録されません)")) {
+                forceStopTaTimer();
+                resetTaUi();
+            }
         }
 
         function executeTaTracking(userLat, userLng) {
@@ -559,21 +629,22 @@
             document.getElementById("ta-shrine-bearing").innerText = bear;
             document.getElementById("ta-shrine-distance").innerText = Math.round(dist);
 
-            if (dist <= 50) { // 50m圏内突入
-                stopTaTimer();
-                const totalTimeMs = performance.now() - taStartTime;
-                calculateTaScore(totalTimeMs, dist); 
+            if (dist <= 50) { 
+                forceStopTaTimer();
+                // 一時停止を含んだ本当の合計経過時間を算出
+                const finalTimeMs = taElapsedBeforePause;
+                calculateTaScore(finalTimeMs, dist); 
             }
         }
 
-        function stopTaTimer() {
+        function forceStopTaTimer() {
             taIsRunning = false;
             clearInterval(taTimerInterval);
         }
 
         // --- スコア算出・チート判定システム ---
         function calculateAvgWalkingSpeed() {
-            const baseStride = userData.height * 0.45; // cm
+            const baseStride = userData.height * 0.45; 
             const footFactor = userData.foot / 26;
             const kmh = (baseStride / 100) * 1.2 * 3.6 * footFactor; 
             return kmh;
@@ -610,7 +681,7 @@
         }
 
         function handleCheatingDetected() {
-            stopTaTimer();
+            forceStopTaTimer();
             document.getElementById("ta-speed-alert").style.display = "block";
             alert("⚠️ 【速度超過を検知】\n歩行速度を大幅に超える移動速度が検出されました。タイムアタックを強制終了します。");
             resetTaUi();
