@@ -230,8 +230,9 @@
 
     <div id="screen-main" class="screen">
         <h2 style="margin-top: 40px;">デフォルトモード</h2>
-        <div class="box" style="font-size:11px; background:#f9f9f9; text-align: center;">
-            現在位置　・・・北緯: <span id="gps-lat">取得中...</span> | 東経: <span id="gps-lng">取得中...</span>
+        <div class="box" style="font-size:11px; background:#f9f9f9; text-align: center; line-height: 1.6;">
+            現在位置 ・・・ 北緯: <span id="gps-lat">取得中...</span> | 東経: <span id="gps-lng">取得中...</span><br>
+            🧭 向いている方角: <span id="gps-heading" style="font-weight: bold;">--</span>°
         </div>
         
         <div id="shrine-list" style="width:100%; display:flex; flex-direction:column; align-items:center;">
@@ -440,12 +441,14 @@
             return Math.round((Math.atan2(y, x) * 180 / Math.PI + 360) % 360);
         }
 
-        // --- GPS リアルタイム追従 ---
+// --- GPS リアルタイム追従 ＆ デバイス方向検知 ---
         function startGpsTracking() {
             if (!navigator.geolocation) {
                 alert("このブラウザは位置情報に対応していません。");
                 return;
             }
+            
+            // 1. 位置情報の常時追従処理
             currentWatchId = navigator.geolocation.watchPosition(
                 (position) => {
                     const lat = position.coords.latitude;
@@ -471,6 +474,42 @@
                 (err) => { console.error("GPSエラー:", err); },
                 { enableHighAccuracy: true, maximumAge: 0 }
             );
+
+            // 2. 💡ここを追加：向き（コンパス）の検知処理
+            // Androidや一部ブラウザ向けの絶対方位、または通常の方向イベントを監視
+            const handleOrientation = (event) => {
+                // absoluteのalpha、または通常のwebkitCompassHeading（iOS用）を取得
+                let heading = event.alpha;
+                if (event.webkitCompassHeading) {
+                    // iOS（Safari）の場合はこれが正確な北基準の方位角
+                    heading = event.webkitCompassHeading;
+                } else if (event.absolute === true || event.absolute === undefined) {
+                    // Androidなどの絶対方位の場合、alphaは反時計回りなので360から引いて時計回りに補正
+                    if (heading !== null) {
+                        heading = (360 - heading) % 360;
+                    }
+                }
+
+                const headingSpan = document.getElementById("gps-heading");
+                if (headingSpan && heading !== null && heading !== undefined) {
+                    // 小数点以下を四捨五入して360°表記で画面に表示
+                    headingSpan.innerText = Math.round(heading);
+                }
+            };
+
+            // iOS 13+ の場合はユーザーの許可要求が必要なため安全に分岐
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // 初回画面タップ時などに許可を取る仕組みが別途必要になる場合がありますが、
+                // まずは標準的なイベントリスナーを設定します
+                window.addEventListener("deviceorientation", handleOrientation, true);
+            } else {
+                // Android や PC、古いiOSブラウザ向け
+                if ('ondeviceorientationabsolute' in window) {
+                    window.addEventListener("deviceorientationabsolute", handleOrientation, true);
+                } else {
+                    window.addEventListener("deviceorientation", handleOrientation, true);
+                }
+            }
         }
 
         // --- 通常探索モード：ループ検索アルゴリズム ---
