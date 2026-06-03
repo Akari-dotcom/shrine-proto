@@ -1,6 +1,6 @@
 {
-  "short_name": "神社レーダー",
-  "name": "神社探索レーダーアプリ",
+  "short_name": "神社巡りサポーター",
+  "name": "神社巡りサポーター",
   "icons": [
     {
       "src": "./torii.png",
