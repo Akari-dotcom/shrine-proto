@@ -8,6 +8,17 @@
     <link rel="icon" type="image/png" href="./torii.png">
     <link rel="apple-touch-icon" href="./torii.png">
 
+    <link rel="manifest" href="./manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker: Registered', reg))
+                    .catch(err => console.error('Service Worker: Error', err));
+            });
+        }
+    </script>
+
     <style>
         /* --- 基本設定 --- */
         :root {
@@ -277,14 +288,14 @@
         // タイムアタック用変数
         let taTargetShrine = null;
         let taStartTime = null;
-        let taElapsedBeforePause = 0; // 一時停止前の経過時間を蓄積
+        let taElapsedBeforePause = 0; 
         let taTimerInterval = null;
         let taIsRunning = false;
-        let taIsPaused = false; // 一時停止フラグ
+        let taIsPaused = false; 
 
         const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        // --- 1. 同階層の外部JSONファイルを読み込む関数 ---
+        // --- 同階層の外部JSONファイルを読み込む関数 ---
         async function fetchShrineDatabase() {
             try {
                 const response = await fetch("./shrines.json");
@@ -347,7 +358,7 @@
         function startApp() {
             userData.name = document.getElementById("setup-name").value || "ニワトリ";
             userData.height = Number(document.getElementById("setup-height").value) || 170;
-            userData.foot = document.getElementById("setup-foot").value || 26;
+            userData.foot = Number(document.getElementById("setup-foot").value) || 26;
 
             localStorage.setItem("shrine_app_configured", "true");
             localStorage.setItem("user_name", userData.name);
@@ -435,7 +446,6 @@
                     if (userData.currentMode === "normal") {
                         executeSearchLogic(lat, lng);
                     } else if (userData.currentMode === "ta" && taIsRunning && !taIsPaused) {
-                        // 💡一時停止中でない場合のみ追従処理を実行
                         executeTaTracking(lat, lng);
                     }
                 },
@@ -444,7 +454,7 @@
             );
         }
 
-        // --- 通常モード：ループ検索アルゴリズム ---
+        // --- 通常探索モード：ループ検索アルゴリズム ---
         function executeSearchLogic(userLat, userLng) {
             let radius = 1500; 
             const maxRadius = 10000; 
@@ -563,13 +573,11 @@
             });
         }
 
-        // タイマースタート
         function startTaTimer() {
             taIsRunning = true;
             taIsPaused = false;
             taStartTime = performance.now();
 
-            // ボタン表示の切り替え
             document.getElementById("ta-lottery-btn").style.display = "none";
             document.getElementById("ta-start-btn").style.display = "none";
             document.getElementById("ta-pause-btn").style.display = "inline-block";
@@ -578,7 +586,6 @@
             runTimerInterval();
         }
 
-        // タイマーの更新処理ループ
         function runTimerInterval() {
             taTimerInterval = setInterval(() => {
                 const elapsedSinceStart = performance.now() - taStartTime;
@@ -591,30 +598,26 @@
             }, 10);
         }
 
-        // 💡新規：一時停止 と 再開 のトグル制御
         function toggleTaPause() {
             if (!taIsRunning) return;
 
             if (!taIsPaused) {
-                // 【一時停止する処理】
                 taIsPaused = true;
-                clearInterval(taTimerInterval); // タイマー停止
-                taElapsedBeforePause += (performance.now() - taStartTime); // ここまでの経過時間を保存
+                clearInterval(taTimerInterval); 
+                taElapsedBeforePause += (performance.now() - taStartTime); 
                 
                 document.getElementById("ta-pause-btn").innerText = "再開";
                 document.getElementById("ta-paused-alert").style.display = "block";
             } else {
-                // 【再開する処理】
                 taIsPaused = false;
-                taStartTime = performance.now(); // スタート時間をリセット
+                taStartTime = performance.now(); 
                 
                 document.getElementById("ta-pause-btn").innerText = "一時停止";
                 document.getElementById("ta-paused-alert").style.display = "none";
-                runTimerInterval(); // タイマー再始動
+                runTimerInterval(); 
             }
         }
 
-        // 💡新規：中止（停止・リセット）ボタンの処理
         function stopAndResetTa() {
             if (confirm("現在進行中のタイムアタックを中止してリセットしますか？\n(現在のスコアは記録されません)")) {
                 forceStopTaTimer();
@@ -631,8 +634,7 @@
 
             if (dist <= 50) { 
                 forceStopTaTimer();
-                // 一時停止を含んだ本当の合計経過時間を算出
-                const finalTimeMs = taElapsedBeforePause;
+                const finalTimeMs = taElapsedBeforePause + (performance.now() - taStartTime);
                 calculateTaScore(finalTimeMs, dist); 
             }
         }
